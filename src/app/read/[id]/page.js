@@ -1,137 +1,143 @@
-// app/read/[id]/page.js
-"use client";
+// src/app/read/[id]/page.js
+// This is now a Server Component, compatible with 'output: export'
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+// No "use client"; at the top for Server Components
 
-// Define the base URL for your preferred external manga reading site
-const EXTERNAL_READ_MANGA_BASE_URL = "https://mangataro.net/home";
+import Link from "next/link"; // For navigation within your app
+import Image from "next/image"; // For optimized image handling
+import MangaButtons from "./MangaButtons"; // Import the new Client Component
 
-export default function MangaDetail() {
-  const params = useParams();
-  const router = useRouter();
-  const mangaId = params.id; // This will be the AniList ID passed from the URL
-  const [manga, setManga] = useState(null);
+// Note: EXTERNAL_READ_MANGA_BASE_URL is now only in MangaButtons.js
 
-  useEffect(() => {
-    if (!mangaId) return;
+// generateStaticParams runs at build time to determine which static pages to generate.
+export async function generateStaticParams() {
+  let mangaIds = [];
+  try {
+    // --- IMPORTANT: Customize this section to fetch YOUR manga IDs ---
+    // For rate limiting issues, consider reducing the limit here temporarily
+    const response = await fetch('https://api.jikan.moe/v4/top/manga?limit=5', { // <-- Try a smaller limit here
+      next: { revalidate: 3600 }
+    });
+    const data = await response.json();
 
-    const query = `
-      query ($id: Int) {
-        Media(id: $id, type: MANGA) {
-          id
-          title {
-            english
-            romaji
-          }
-          coverImage {
-            large
-          }
-          description(asHtml: false)
-          siteUrl
+    if (response.ok && data.data) {
+      mangaIds = data.data.map((manga) => ({
+        id: manga.mal_id.toString(),
+      }));
+    } else {
+      console.error("Failed to fetch manga IDs for generateStaticParams:", data);
+    }
+  } catch (error) {
+    console.error("Error in generateStaticParams for /read/[id]:", error);
+  }
+
+  return mangaIds;
+}
+
+// Your MangaDetail component (now a Server Component)
+export default async function MangaDetail({ params }) {
+  const mangaId = params.id;
+
+  let manga = null;
+  let error = false;
+  let notFound = false;
+
+  if (!mangaId) {
+    notFound = true;
+  } else {
+    try {
+      // Fetch manga details directly in the async component function
+      const response = await fetch(`https://api.jikan.moe/v4/manga/${mangaId}/full`);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          notFound = true;
+        } else {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
       }
-    `;
 
-    fetch("https://graphql.anilist.co", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, variables: { id: parseInt(mangaId) } }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.data && data.data.Media) {
-          setManga(data.data.Media);
-        } else {
-          console.error("Failed to fetch manga details:", data);
-          setManga(null);
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching manga details:", error);
-        setManga(null);
-      });
-  }, [mangaId]);
+      const data = await response.json();
 
-  // Function to clean the description by removing unwanted text
+      if (data && data.data) {
+        manga = data.data;
+      } else {
+        notFound = true;
+      }
+    } catch (err) {
+      console.error("Error fetching manga details from Jikan:", err);
+      error = true;
+    }
+  }
+
   const cleanDescription = (description) => {
     if (!description) return "No description available.";
-
-    let cleanedText = description;
-
-    // Remove "(Source: Viz Media)" and surrounding <br> tags
-    cleanedText = cleanedText.replace(/<br\s*\/?>\s*<br\s*\/?>\s*\(Source: Viz Media\)/g, '');
-    cleanedText = cleanedText.replace(/\(Source: Viz Media\)/g, '');
-
-    // Remove the entire "Notes:" section and its content
-    cleanedText = cleanedText.replace(/<br\s*\/?>\s*<br\s*\/?>\s*<i>Notes:[\s\S]*<\/i>/gi, '');
-    cleanedText = cleanedText.replace(/Notes:[\s\S]*/gi, '');
-
-    return cleanedText.trim();
+    return description.replace(/<br>|<i>|<\/i>|<b>|<\/b>|&mdash;/g, "");
   };
 
-  // Function to navigate back to the homepage
-  const handleBackToHome = () => {
-    router.push('/');
-  };
-
-  // Function to open the external manga reading site
-  const handleReadManga = () => {
-    window.open(EXTERNAL_READ_MANGA_BASE_URL, '_blank');
-  };
-
-  if (!manga) {
+  // --- Render based on fetch results ---
+  if (notFound) {
     return (
-      <div className="bg-gray-900 min-h-screen flex justify-center items-center text-white">
-        Loading manga details...
+      <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white p-4">
+        <p className="text-xl text-red-400 mb-4 text-center">
+          Manga not found.
+        </p>
+        <Link
+          href="/"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md transition duration-300 shadow-md"
+        >
+          Back to Home
+        </Link>
       </div>
     );
   }
 
-  const displayDescription = cleanDescription(manga.description);
+  if (error || !manga) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white p-4">
+        <p className="text-xl text-red-400 mb-4 text-center">
+          Failed to load manga details. Please try again later.
+        </p>
+        <Link
+          href="/"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md transition duration-300 shadow-md"
+        >
+          Back to Home
+        </Link>
+      </div>
+    );
+  }
+
+  const displayTitle = manga.title || "Untitled";
+  const coverImageUrl = manga.images?.jpg?.large_image_url;
+  const description = cleanDescription(manga.synopsis);
 
   return (
-    <main className="bg-gray-900 min-h-screen p-6 text-white max-w-4xl mx-auto">
-      {/* Back Button */}
-      <button
-        onClick={handleBackToHome}
-        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md transition duration-300 shadow-md mb-8 flex items-center space-x-2"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-        </svg>
-        <span>Back to Home</span>
-      </button>
-
-      {/* Manga Title */}
-      <h1 className="text-4xl font-bold mb-6">
-        {manga.title.english || manga.title.romaji}
-      </h1>
-
-      {/* Manga Details Section */}
-      <div className="flex flex-col md:flex-row gap-6 bg-gray-800 p-6 rounded-lg shadow-lg">
-        {/* Manga Cover Image */}
-        <img
-          src={manga.coverImage.large}
-          alt={manga.title.english || manga.title.romaji}
-          className="rounded-lg shadow-lg md:w-1/3 object-cover w-full h-auto max-h-[400px]"
-          onError={(e) => { e.target.onerror = null; e.target.src="https://placehold.co/300x400/333/FFF?text=No+Image"; }}
-        />
-
-        {/* Manga Description and Read Manga Link */}
-        <div className="md:w-2/3 flex flex-col justify-between">
-          <p className="mb-6 whitespace-pre-line text-gray-300">
-            {displayDescription}
-          </p>
-
-          <button
-            onClick={handleReadManga}
-            className="inline-block bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-md transition duration-300 font-semibold text-center mt-auto"
-          >
-            Read Manga Now!
-          </button>
+    <div className="flex flex-col items-center bg-gray-900 min-h-screen text-white p-4 sm:p-8">
+      <div className="w-full max-w-4xl bg-gray-800 rounded-lg shadow-xl p-6 sm:p-8 mb-8">
+        <div className="flex flex-col sm:flex-row gap-6">
+          <div className="flex-shrink-0 sm:w-1/3">
+            <Image
+              src={coverImageUrl || "https://placehold.co/300x450/333/FFF?text=No+Image"}
+              alt={displayTitle}
+              width={300}
+              height={450}
+              className="w-full h-auto object-cover rounded-lg shadow-lg border-2 border-blue-500"
+              priority={true}
+            />
+          </div>
+          <div className="flex-grow sm:w-2/3">
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-blue-400 mb-4">
+              {displayTitle}
+            </h1>
+            <p className="text-gray-300 text-lg mb-6 leading-relaxed">
+              {description}
+            </p>
+            {/* Use the new MangaButtons Client Component */}
+            <MangaButtons />
+          </div>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

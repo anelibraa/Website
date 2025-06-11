@@ -1,3 +1,4 @@
+// app/components/RankingSidebar.js
 "use client";
 
 import { useEffect, useState } from "react";
@@ -5,6 +6,8 @@ import { useEffect, useState } from "react";
 export default function RankingSidebar() {
   const [topManga, setTopManga] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   // Disable background scroll when modal is open
   useEffect(() => {
@@ -15,40 +18,41 @@ export default function RankingSidebar() {
     }
   }, [showModal]);
 
-  // Fetch top manga
+  // Fetch top manga from Jikan API
   useEffect(() => {
-    const query = `
-      query {
-        Page(perPage: 10) {
-          media(type: MANGA, sort: SCORE_DESC) {
-            id
-            title {
-              romaji
-              english
-            }
-            coverImage {
-              medium
-            }
-            averageScore
-          }
-        }
-      }
-    `;
+    const fetchTopManga = async () => {
+      setLoading(true);
+      setError(false);
+      try {
+        // Jikan API endpoint for top manga, sorted by score
+        // 'filter=bypopularity' is used to get popular manga
+        // For score, Jikan's /top/manga endpoint already returns by score by default.
+        const response = await fetch("https://api.jikan.moe/v4/top/manga?limit=10");
 
-    fetch("https://graphql.anilist.co", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        setTopManga(data?.data?.Page?.media || []);
-      })
-      .catch((error) => {
-        console.error("Error fetching top manga:", error);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data && data.data) {
+          setTopManga(data.data);
+        } else {
+          console.error("Failed to fetch top manga data from Jikan:", data);
+          setTopManga([]);
+          setError(true);
+        }
+      } catch (err) {
+        console.error("Error fetching top manga from Jikan:", err);
         setTopManga([]);
-      });
-  }, []);
+        setError(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTopManga();
+  }, []); // Empty dependency array means this effect runs once on mount
 
   return (
     <div className="p-4">
@@ -71,23 +75,31 @@ export default function RankingSidebar() {
 
             <h2 className="text-xl font-bold text-white mb-4">Top Manga</h2>
 
-            {topManga.length === 0 ? (
+            {loading ? (
               <p className="text-gray-400 text-center py-4">
-                Loading rankings or no data available...
+                Loading rankings...
+              </p>
+            ) : error ? (
+              <p className="text-red-400 text-center py-4">
+                Failed to load rankings. Please try again later.
+              </p>
+            ) : topManga.length === 0 ? (
+              <p className="text-gray-400 text-center py-4">
+                No top manga available.
               </p>
             ) : (
               <ul className="space-y-4">
                 {topManga.map((manga, index) => (
                   <li
-                    key={manga.id}
+                    key={manga.mal_id} // Use Jikan's mal_id as the key
                     className="flex items-center space-x-3 hover:bg-gray-700 p-2 rounded-md transition"
                   >
                     <span className="text-xl font-bold text-blue-400">
                       {index + 1}.
                     </span>
                     <img
-                      src={manga.coverImage.medium}
-                      alt={manga.title.english || manga.title.romaji}
+                      src={manga.images?.jpg?.small_image_url} // Use Jikan's small image URL
+                      alt={manga.title}
                       className="w-12 h-16 object-cover rounded-md shadow-sm"
                       onError={(e) => {
                         e.target.onerror = null;
@@ -97,11 +109,11 @@ export default function RankingSidebar() {
                     />
                     <div className="flex-1">
                       <p className="text-sm font-semibold text-white break-words">
-                        {manga.title.english || manga.title.romaji}
+                        {manga.title}
                       </p>
-                      {manga.averageScore && (
+                      {manga.score && ( // Jikan uses 'score' for average score
                         <p className="text-xs text-gray-400">
-                          Score: {manga.averageScore}%
+                          Score: {manga.score}%
                         </p>
                       )}
                     </div>

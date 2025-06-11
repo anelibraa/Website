@@ -1,21 +1,68 @@
+/* app/globals.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Define new primary colors for your dark theme with purple/pink hints */
+  --primary-bg: #101010; /* Very dark background, almost black */
+  --secondary-bg: #1a1a1a; /* Slightly lighter dark for cards/sections */
+  --text-light: #000000; /* Light gray for general text */
+  --text-dark: #A0A0A0; /* Darker gray for secondary text */
+  --accent-color: #8A2BE2; /* Vibrant BlueViolet for accents */
+  --highlight-color: #FF69B4; /* HotPink for highlights (like "Upcoming" tags, active states) */
+  --norime-text: #FFFFFF; /* Pure white for NORIME logo and main headings */
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text-light);
+  background: var(--primary-bg);
+  font-family: 'Inter', sans-serif;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden; /* Prevent horizontal scroll from layout issues */
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Montserrat', sans-serif;
+  color: var(--norime-text); /* Headings white by default */
+}
+
+/* Custom Scrollbar for horizontal sections */
+.custom-scrollbar::-webkit-scrollbar {
+  height: 8px; /* For horizontal scrollbars */
+  width: 8px; /* For vertical scrollbars (like in the modal) */
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: var(--secondary-bg); /* Darker track color */
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--accent-color); /* Thumb color - uses new purple */
+  border-radius: 10px;
+  border: 2px solid var(--secondary-bg); /* Add border for better contrast */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--highlight-color); /* Highlight color on hover - uses new pink */
+}
+
+/* For Firefox */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-color) var(--secondary-bg);
+}
+
+/* Basic resets for consistency */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
 }
